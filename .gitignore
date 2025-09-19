@@ -1,0 +1,38 @@
+# Ignore Qt Creator build directories
+build*/
+*.user
+
+# Ignore CMake build files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+install_manifest.txt
+compile_commands.json
+
+# Ignore object and binary files
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dll
+*.dylib
+*.exe
+*.app
+
+# Ignore Qt-specific generated files
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.bak
+
+# Qt Creator’s project-specific files
+*.pro.user
+*.qmlproject.user
+*.autosave
