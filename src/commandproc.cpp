@@ -127,6 +127,9 @@ patrol::Command CommandProc::processCommand(const patrol::Command& request)
     else if (request.hasEcStatusReq()) {
         response.setEcStatusResp(handleEcGetStatus(request.ecStatusReq()));
     }
+    else if (request.hasPowerReq()) {
+        response.setPowerResp(handlePowerCommand(request.powerReq()));
+    }
     else {
         m_pLogger->log("Unknown command type received", Logger::Warning);
     }
