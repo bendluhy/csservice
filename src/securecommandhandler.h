@@ -1,14 +1,18 @@
-#ifndef SECURECOMMANDHANDLERV2_H
-#define SECURECOMMANDHANDLERV2_H
+#ifndef SECURECOMMANDHANDLER_H
+#define SECURECOMMANDHANDLER_H
 
 #include <QObject>
 #include <QLocalSocket>
 #include <QByteArray>
 #include <QMap>
 #include <QDateTime>
+#include <QProtobufSerializer>
 #include "Logger.h"
 #include "CommandProc.h"
-#include "SecureProtocol.h"
+#include "command.qpb.h"
+
+// Use the shared protocol - this ensures client and server match
+#include "../../Shared/Src/secureprotocol.h"
 
 struct ClientSession {
     uint32_t token;
@@ -20,15 +24,15 @@ struct ClientSession {
     bool isAuthenticated;
 };
 
-class SecureCommandHandlerV2 : public QObject
+class SecureCommandHandler : public QObject
 {
     Q_OBJECT
 
 public:
-    explicit SecureCommandHandlerV2(Logger* logger, CommandProc* cmdProc, QObject* parent = nullptr);
-    ~SecureCommandHandlerV2();
+    explicit SecureCommandHandler(Logger* logger, CommandProc* cmdProc, QObject* parent = nullptr);
+    ~SecureCommandHandler();
 
-    // Process incoming command
+    // Process incoming command - returns response packet
     QByteArray processCommand(const QByteArray& data, QLocalSocket* client);
 
     // Client management
@@ -40,6 +44,7 @@ private:
     Logger* m_pLogger;
     CommandProc* m_pCmdProc;
     QMap<QLocalSocket*, ClientSession> m_clients;
+    QProtobufSerializer m_serializer;
 
     // Authentication
     bool authenticateClient(const QByteArray& authData, QLocalSocket* client);
@@ -48,4 +53,7 @@ private:
     bool validateSequence(QLocalSocket* client, uint32_t sequence);
 };
 
-#endif // SECURECOMMANDHANDLERV2_H
+// Keep the old name as alias for compatibility with existing code
+using SecureCommandHandlerV2 = SecureCommandHandler;
+
+#endif // SECURECOMMANDHANDLER_H

@@ -9,37 +9,93 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 COMPONENTS Core Network REQUIRED)
+set(CMAKE_TOOLCHAIN_FILE "C:/vcpkg/scripts/buildsystems/vcpkg.cmake")
+set(Protobuf_DIR "C:/vcpkg/installed/x64-windows/share/protobuf")
+set(protobuf_DIR "C:/vcpkg/installed/x64-windows/share/protobuf")
+set(Protobuf_SRC_ROOT_FOLDER "C:/vcpkg/installed/x64-windows")
 
-# Include the common header directory globally
-include_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../Shared/Src
+find_package(Qt6 REQUIRED COMPONENTS
+    Core
+    Network
+    Protobuf
 )
 
 add_executable(CSService
-  main.cpp
-  windowsservice.h windowsservice.cpp
-  logger.h logger.cpp
-  winring0.cpp winring0.h
-  appresource.cpp appresource.h
-  commandproc.h commandproc.cpp
-  registryaccess.h registryaccess.cpp
-  wmiaccess.h wmiaccess.cpp
-  namedpipeserver.h namedpipeserver.cpp
-  launcher.cpp
-  launcher.h
-  monitor.h monitor.cpp
-  ecmemorymirror.h ecmemorymirror.cpp
-  securecommandhandler.h securecommandhandler.cpp
-  ../../Shared/Src/CommandMessage.h
-  ../../Shared/Src/secureprotocol.cpp ../../Shared/Src/secureprotocol.h
+    src/main.cpp
+
+    src/windowsservice.cpp
+    src/windowsservice.h
+
+    src/logger.cpp
+    src/logger.h
+
+    src/appresource.cpp
+    src/appresource.h
+
+    src/commandproc.cpp
+    src/commandproc.h
+
+    src/registryaccess.cpp
+    src/registryaccess.h
+
+    src/wmiaccess.cpp
+    src/wmiaccess.h
+
+    src/namedpipeserver.cpp
+    src/namedpipeserver.h
+
+    src/launcher.cpp
+    src/launcher.h
+
+    src/monitor.cpp
+    src/monitor.h
+
+    src/ecmemorymirror.cpp
+    src/ecmemorymirror.h
+
+    src/securecommandhandler.cpp
+    src/securecommandhandler.h
+
+    src/eccommunication/ecmanager.cpp
+    src/eccommunication/ecmanager.h
+
+    src/eccommunication/emiio.cpp
+    src/eccommunication/emiio.h
+
+    src/eccommunication/emithread.cpp
+    src/eccommunication/emithread.h
+
+    src/eccommunication/host_ec_cmds.h
+    src/eccommunication/appstd.h
+    src/eccommunication/portio.h
+    src/eccommunication/portio.cpp
+
+    ../../Shared/Src/CommandMessage.h
+    ../../Shared/Src/secureprotocol.cpp
+    ../../Shared/Src/secureprotocol.h
+    src/os/os.h src/os/os.cpp
 )
-target_link_libraries(CSService
+
+qt_add_protobuf(CSService
+    PROTO_FILES
+        ../../Shared/Proto/command.proto
+)
+
+target_include_directories(CSService PRIVATE
+    ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Shared/Src
+)
+
+target_link_libraries(CSService PRIVATE
     Qt6::Core
     Qt6::Network
+    Qt6::Protobuf
     advapi32
+    PowrProf
 )
+
 include(GNUInstallDirs)
+
 install(TARGETS CSService
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}

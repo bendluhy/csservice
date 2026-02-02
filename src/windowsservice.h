@@ -9,12 +9,10 @@
 #include "Logger.h"
 #include "namedpipeserver.h"
 #include "commandproc.h"
-#include "CommandMessage.h"
 #include "monitor.h"
 #include "ecmemorymirror.h"
 #include "securecommandhandler.h"
 
-#define PIPE_NAME   "PPC_SERV"
 #define SHUTDOWN_TIMEOUT_MS 10000
 
 class WindowsService : public QObject
@@ -31,12 +29,20 @@ public:
     void stop();
     void runAsService();
     void runAsApp();
-
+    //EC HELPERS
+    void clearEcState();
+    void testEcCommunication();
     static void WINAPI serviceMain(DWORD argc, LPTSTR *argv);
     static void WINAPI serviceCtrlHandler(DWORD ctrlCode);
 
 private slots:
     void onShutdownTimeout();
+
+    // Pipe event handlers
+    void onControlScreensCommand(const QByteArray& data, QLocalSocket* client);
+    void onCSMonitorCommand(const QByteArray& data, QLocalSocket* client);
+    void onClientConnected(PipeType pipeType, QLocalSocket* client);
+    void onClientDisconnected(PipeType pipeType, QLocalSocket* client);
 
 private:
     void setServiceStatus(DWORD currentState, DWORD win32ExitCode = NO_ERROR, DWORD waitHint = 0);
@@ -54,7 +60,7 @@ private:
     Logger m_logger;
     CommandProc m_commandProc;
     NamedPipeServer* m_pipeServer;
-    SecureCommandHandlerV2* m_secureHandler;
+    SecureCommandHandler* m_secureHandler;  // Changed type name
     Monitor* m_monitor;
     ECMemoryWriter* m_ecMemoryWriter;
     QTimer* m_shutdownTimer;

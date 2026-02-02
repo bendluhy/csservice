@@ -1,7 +1,7 @@
 #include "Logger.h"
 #include <QDebug>
 #include <QCoreApplication>
-
+#include <QDebug>
 Logger::Logger(const QString &logDir, QObject *parent)
     : QObject(parent)
     , m_logDir(logDir)
@@ -92,6 +92,7 @@ void Logger::log(const QString &message, LogLevel level)
     // Write to file
     m_logStream << logLine << "\n";
     m_logStream.flush();
+    qDebug().noquote() << logLine;
 
 // Also output to debug console in debug builds
 #ifdef QT_DEBUG
