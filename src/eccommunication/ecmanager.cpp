@@ -1,5 +1,5 @@
 #include "ecmanager.h"
-#include "../logger.h"
+#include "logger.h"
 #include <QElapsedTimer>
 
 EcManager::EcManager(Logger* logger, QObject* parent)
@@ -135,10 +135,10 @@ EC_HOST_CMD_STATUS EcManager::sendCommandSync(QSharedPointer<EmiCmd> pCmd, int t
     }
 
     m_commandCount++;
-    log(QString("Queued sync command 0x%1, packet %2")
+    /*log(QString("Queued sync command 0x%1, packet %2")
             .arg(pCmd->cmd, 4, 16, QChar('0'))
-            .arg(pCmd->packetid));
-
+            .arg(pCmd->packetid), 3);
+    */
     // Wait for completion - wait() atomically releases mutex and waits
     QElapsedTimer timer;
     timer.start();
@@ -229,7 +229,7 @@ quint32 EcManager::sendCommandAsync(QSharedPointer<EmiCmd> pCmd)
     m_commandCount++;
     log(QString("Queued async command 0x%1, packet %2")
             .arg(pCmd->cmd, 4, 16, QChar('0'))
-            .arg(packetId));
+            .arg(packetId), 3);
 
     return packetId;
 }

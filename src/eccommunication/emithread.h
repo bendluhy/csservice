@@ -2,7 +2,6 @@
 #define EMITHREAD_H
 
 #include <QObject>
-#include <QLoggingCategory>
 #include <QMutex>
 #include <QQueue>
 #include <QWaitCondition>
@@ -10,6 +9,7 @@
 #include <QPointer>
 #include "host_ec_cmds.h"
 #include "portio.h"
+#include "logger.h"
 
 class EmiThread : public QThread
 {
@@ -22,14 +22,19 @@ public:
     void stop();
     int addCmdToQueue(QSharedPointer<EmiCmd>);
 
+    void setLogger(Logger* logger) { m_pLogger = logger; }
+
 signals:
     void CommandDone(QSharedPointer<EmiCmd>);
     void TxOut(int bytes);
     void RxIn(int bytes);
 
 private:
+    void log(const QString& message, Logger::LogLevel level = Logger::Info);
+
     quint16 m_EmiOffset = 0x220;
     PortIo* m_pPort;
+    Logger* m_pLogger = nullptr;
     QMutex m_Mutex;
     QQueue<QSharedPointer<EmiCmd>> m_pCmdQueue;
     QWaitCondition m_WaitCondition;

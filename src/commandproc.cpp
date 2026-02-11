@@ -103,6 +103,9 @@ patrol::Command CommandProc::processCommand(const patrol::Command& request)
     else if (request.hasEcAcpiWriteReq()) {
         response.setEcAcpiWriteResp(handleEcAcpiWrite(request.ecAcpiWriteReq()));
     }
+    else if (request.hasEcAcpiQueueWriteReq()) {
+        response.setEcAcpiQueueWriteResp(handleEcAcpiQueueWrite(request.ecAcpiQueueWriteReq()));
+    }
     else if (request.hasEcRamReadReq()) {
         response.setEcRamReadResp(handleEcRamRead(request.ecRamReadReq()));
     }
@@ -130,13 +133,100 @@ patrol::Command CommandProc::processCommand(const patrol::Command& request)
     else if (request.hasPowerReq()) {
         response.setPowerResp(handlePowerCommand(request.powerReq()));
     }
+    else if (request.hasPollActionCmdsReq()) {
+        response.setPollActionCmdsResp(handlePollActionCommands(request.pollActionCmdsReq()));
+    }
+    else if (request.hasActionCmdResultReq()) {
+        response.setActionCmdResultResp(handleActionCommandResult(request.actionCmdResultReq()));
+    }
+    else if (request.hasDisplayBrightnessReq()) {
+        response.setDisplayBrightnessResp(
+            handleDisplayBrightness(request.displayBrightnessReq()));
+    }
+    else if (request.hasDisplayAutoBrightnessReq()) {
+        response.setDisplayAutoBrightnessResp(
+            handleDisplayAutoBrightness(request.displayAutoBrightnessReq()));
+    }
     else {
         m_pLogger->log("Unknown command type received", Logger::Warning);
     }
 
     return response;
 }
+uint32_t CommandProc::queueAddAction(uint32_t eventId, const QString& name, const QString& qmlPath, const QStringList& params, int position)
+{
+    patrol::ActionCommand cmd;
+    cmd.setType(patrol::ActionCommand::Type::ADD_ACTION);
+    cmd.setEventId(eventId);
+    cmd.setIndex(position);
 
+    patrol::ActionData action;
+    action.setName(name);
+    action.setQmlPath(qmlPath);
+    action.setParams(params);
+    cmd.setAction(action);
+
+    return m_actionQueue.queueCommand(cmd);
+}
+
+uint32_t CommandProc::queueEditAction(uint32_t eventId, int index, const QString& name, const QString& qmlPath, const QStringList& params)
+{
+    patrol::ActionCommand cmd;
+    cmd.setType(patrol::ActionCommand::Type::EDIT_ACTION);
+    cmd.setEventId(eventId);
+    cmd.setIndex(index);
+
+    patrol::ActionData action;
+    action.setName(name);
+    action.setQmlPath(qmlPath);
+    action.setParams(params);
+    cmd.setAction(action);
+
+    return m_actionQueue.queueCommand(cmd);
+}
+
+uint32_t CommandProc::queueRemoveAction(uint32_t eventId, int index)
+{
+    patrol::ActionCommand cmd;
+    cmd.setType(patrol::ActionCommand::Type::REMOVE_ACTION);
+    cmd.setEventId(eventId);
+    cmd.setIndex(index);
+
+    return m_actionQueue.queueCommand(cmd);
+}
+
+uint32_t CommandProc::queueGetActions(uint32_t eventId)
+{
+    patrol::ActionCommand cmd;
+    cmd.setType(patrol::ActionCommand::Type::GET_ACTIONS);
+    cmd.setEventId(eventId);
+
+    return m_actionQueue.queueCommand(cmd);
+}
+
+uint32_t CommandProc::queueGetAllEvents()
+{
+    patrol::ActionCommand cmd;
+    cmd.setType(patrol::ActionCommand::Type::GET_ALL_EVENTS);
+
+    return m_actionQueue.queueCommand(cmd);
+}
+
+uint32_t CommandProc::queueGetAvailableActions()
+{
+    patrol::ActionCommand cmd;
+    cmd.setType(patrol::ActionCommand::Type::GET_AVAILABLE_ACTIONS);
+
+    return m_actionQueue.queueCommand(cmd);
+}
+
+uint32_t CommandProc::queueSaveActions()
+{
+    patrol::ActionCommand cmd;
+    cmd.setType(patrol::ActionCommand::Type::SAVE_ACTIONS);
+
+    return m_actionQueue.queueCommand(cmd);
+}
 // ============================================================================
 // MSR Handlers
 // ============================================================================
@@ -248,7 +338,46 @@ patrol::RegistryReadResponse CommandProc::handleRegistryRead(const patrol::Regis
 
     return resp;
 }
+void CommandProc::triggerActionEvent(uint32_t eventId)
+{
+    m_actionQueue.triggerEvent(eventId);
+    m_pLogger->log(QString("Queued action trigger for event 0x%1").arg(eventId, 0, 16), Logger::Info);
+}
 
+patrol::PollActionCommandsResponse CommandProc::handlePollActionCommands(const patrol::PollActionCommandsRequest& req)
+{
+    Q_UNUSED(req)
+    patrol::PollActionCommandsResponse resp;
+    resp.setResult(0);
+    resp.setCommands(m_actionQueue.takePending());
+    return resp;
+}
+
+patrol::ActionCommandResultResponse CommandProc::handleActionCommandResult(const patrol::ActionCommandResultRequest& req)
+{
+    // Store the result so Control Screens can retrieve it
+    m_actionQueue.storeResult(req.commandId(), req);
+
+    m_pLogger->log(QString("Action command %1 result: %2").arg(req.commandId()).arg(req.result()), Logger::Debug);
+
+    patrol::ActionCommandResultResponse resp;
+    resp.setResult(0);
+    return resp;
+}
+
+patrol::QueueActionCommandResponse CommandProc::handleQueueActionCommand(const patrol::QueueActionCommandRequest& req)
+{
+    patrol::QueueActionCommandResponse resp;
+
+    uint32_t cmdId = m_actionQueue.queueCommand(req.command());
+
+    resp.setResult(0);
+    resp.setCommandId(cmdId);
+
+    m_pLogger->log(QString("Queued action command type %1, id %2")
+                       .arg(static_cast<int>(req.command().type())).arg(cmdId), Logger::Debug);
+    return resp;
+}
 patrol::RegistryWriteResponse CommandProc::handleRegistryWrite(const patrol::RegistryWriteRequest& req)
 {
     patrol::RegistryWriteResponse resp;
@@ -639,6 +768,34 @@ patrol::EcAcpiWriteResponse CommandProc::handleEcAcpiWrite(const patrol::EcAcpiW
     return resp;
 }
 
+patrol::EcAcpiQueueWriteResponse CommandProc::handleEcAcpiQueueWrite(const patrol::EcAcpiQueueWriteRequest& req)
+{
+    patrol::EcAcpiQueueWriteResponse resp;
+
+    if (!isEcInitialized()) {
+        resp.setResult(static_cast<int>(ResultCode::RES_FAILED_OP));
+        resp.setEcStatus(EcStatus::EC_STATUS_UNAVAILABLE);
+        return resp;
+    }
+
+    quint32 offset = req.namespaceId() == 0 ? req.offset() : req.offset();
+    QByteArray data = req.data();
+
+    m_pLogger->log(QString("ACPI Queue Write: ns=%1 offset=0x%2 size=%3")
+                       .arg(req.namespaceId())
+                       .arg(req.offset(), 2, 16, QChar('0'))
+                       .arg(data.size()), Logger::Debug);
+
+    EC_HOST_CMD_STATUS status = m_pEcManager->acpi0Write(req.offset(), data);
+
+    resp.setResult(status == EC_HOST_CMD_SUCCESS ?
+                       static_cast<int>(ResultCode::RES_OK) :
+                       static_cast<int>(ResultCode::RES_FAILED_OP));
+    resp.setEcStatus(static_cast<EcStatus>(status));
+
+    return resp;
+}
+
 patrol::EcRamReadResponse CommandProc::handleEcRamRead(const patrol::EcRamReadRequest& req)
 {
     patrol::EcRamReadResponse resp;
@@ -945,4 +1102,25 @@ patrol::PowerCommandResponse CommandProc::handlePowerCommand(const patrol::Power
     response.setErrorMessage(errorMsg);
 
     return response;
+}
+patrol::DisplayBrightnessResponse CommandProc::handleDisplayBrightness(
+    const patrol::DisplayBrightnessRequest& req)
+{
+    patrol::DisplayBrightnessResponse resp;
+    // Not implemented service-side — brightness is handled client-side
+    // via readAcpiByte/writeAcpiByte directly
+    resp.setResult(static_cast<int>(ResultCode::RES_OK));
+    resp.setEcStatus(EcStatus::EC_STATUS_SUCCESS);
+    return resp;
+}
+
+patrol::DisplayAutoBrightnessResponse CommandProc::handleDisplayAutoBrightness(
+    const patrol::DisplayAutoBrightnessRequest& req)
+{
+    patrol::DisplayAutoBrightnessResponse resp;
+    // Not implemented service-side — auto brightness is handled client-side
+    // via readAcpiByte/writeAcpiByte directly
+    resp.setResult(static_cast<int>(ResultCode::RES_OK));
+    resp.setEcStatus(EcStatus::EC_STATUS_SUCCESS);
+    return resp;
 }

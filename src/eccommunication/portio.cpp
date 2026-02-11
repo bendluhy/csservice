@@ -2,7 +2,7 @@
 #include <QLoggingCategory>
 #include "appstd.h"
 #include "portio.h"
-#include "../appresource.h"
+#include "appresource.h"
 typedef void	(__stdcall *lpDlPortWritePortUchar)(quint16, quint8);
 typedef quint8	(__stdcall *lpDlPortReadPortUchar)(quint16);
 typedef bool	(__stdcall *lpIsInpOutDriverOpen)(void);

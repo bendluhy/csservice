@@ -74,6 +74,8 @@ add_executable(CSService
     ../../Shared/Src/secureprotocol.cpp
     ../../Shared/Src/secureprotocol.h
     src/os/os.h src/os/os.cpp
+    src/action/actioncommandqueue.h src/action/actioncommandqueue.cpp
+    src/bezel/bezel.h src/bezel/bezel.cpp
 )
 
 qt_add_protobuf(CSService
@@ -84,6 +86,12 @@ qt_add_protobuf(CSService
 target_include_directories(CSService PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Shared/Src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/action
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/bezel
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/eccommunication
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/os
+
 )
 
 target_link_libraries(CSService PRIVATE

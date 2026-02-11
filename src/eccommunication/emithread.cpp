@@ -16,8 +16,6 @@
 #define INTMH_IND       m_EmiOffset + 0x0B
 #define APPID_IND       m_EmiOffset + 0x0C
 
-Q_LOGGING_CATEGORY(emiCategory, "emi", QtDebugMsg)
-
 EmiThread::EmiThread(QObject *parent)
     : QThread{parent}
 {
@@ -29,11 +27,18 @@ EmiThread::~EmiThread()
     stop();
 }
 
+void EmiThread::log(const QString& message, Logger::LogLevel level)
+{
+    if (m_pLogger) {
+        m_pLogger->log(QString("EmiThread: %1").arg(message), level);
+    }
+}
+
 void EmiThread::run()
 {
     QMutexLocker locker(&m_Mutex);
 
-    qCDebug(emiCategory) << "Emi thread started";
+    log("Thread started");
 
     while (true)
     {
@@ -63,11 +68,7 @@ void EmiThread::run()
         // event loop runs, but the caller is blocked waiting - classic deadlock.
         // By calling FuncDone here, we wake the synchronous waiter immediately.
         if (pCmd->FuncDone) {
-            qDebug() << "EmiThread: Calling FuncDone callback for packet" << pCmd->packetid;
             pCmd->FuncDone(pCmd);
-            qDebug() << "EmiThread: FuncDone callback completed";
-        } else {
-            qDebug() << "EmiThread: No FuncDone callback set for packet" << pCmd->packetid;
         }
 
         //Notify EMI controller that we are done (for async/signal-based handling)
@@ -75,6 +76,8 @@ void EmiThread::run()
 
         locker.relock();
     }
+
+    log("Thread stopped");
 }
 
 void EmiThread::stop()
@@ -121,13 +124,11 @@ EC_HOST_CMD_STATUS EmiThread::ProcCmd(QSharedPointer<EmiCmd> pCmd)
         //Check if command takes a while, if so keep poling for it to finish
         if (stat == EC_HOST_CMD_IN_PROGRESS)
         {
-            qCInfo(emiCategory) << "Slow Transfer";
+            log("Slow transfer in progress", Logger::Warning);
             stat = SendCmdGetResults(pCmd->payloadin);
         }
     }
 
-    pCmd->result = stat;
-    qDebug() << "ProcCmd final result:" << stat << "payloadin size:" << pCmd->payloadin.size();
     pCmd->result = stat;
     return stat;
 }
@@ -147,12 +148,12 @@ EC_HOST_CMD_STATUS EmiThread::SendCmdGetResults(QByteArray &payloadin)
         stat = SendCmdOut(packetout, payloadin);
         if (stat == EC_HOST_CMD_SUCCESS)
         {
-            qCInfo(emiCategory) << "Results ready " << i << "ms";
+            log(QString("Results ready after %1ms").arg(i), Logger::Debug);
             return stat;
         }
         else if (stat != EC_HOST_CMD_IN_PROGRESS)
         {
-            qCWarning(emiCategory) << "Result fail response " << stat << "," << i << "ms";
+            log(QString("Result fail response %1 at %2ms").arg(stat).arg(i), Logger::Warning);
             return stat;
         }
 
@@ -170,7 +171,7 @@ EC_HOST_CMD_STATUS EmiThread::SendCmdGetResults(QByteArray &payloadin)
         }
     }
 
-    qCDebug(emiCategory) << "Results timeout " << i << "ms";
+    log(QString("Results timeout after %1ms").arg(i), Logger::Warning);
 
     return EC_HOST_CMD_TIMEOUT;
 }
@@ -184,63 +185,34 @@ EC_HOST_CMD_STATUS EmiThread::SendCmdOut(QByteArray &packetout, QByteArray &payl
     EC_HOST_CMD_STATUS resp;
     const struct ec_host_cmd_response_header* pHdr;
 
-    qDebug() << "=== SendCmdOut START ===";
-    qDebug() << "Packet size:" << packetout.size() << "bytes";
-    qDebug() << "Packet hex:" << packetout.toHex();
-
     // Wait for the emi interface to be open
     resp = WaitBusReady();
     if (resp != EC_HOST_CMD_SUCCESS)
     {
-        qDebug() << "WaitBusReady FAILED:" << resp;
         return EC_HOST_CMD_BUS_ERROR;
     }
-    qDebug() << "Bus is ready";
 
     // Send out the data
     SendPacketOut(packetout);
-    qDebug() << "Packet sent to EMI buffer";
-
-    // Read back what we wrote to verify
-    quint8 verify;
-    m_pPort->Write(ADD0_IND, 0);
-    m_pPort->Write(ADD1_IND, 0);
-    m_pPort->Read(DAT0_IND, &verify);
-    qDebug() << "Verify first byte in buffer:" << Qt::hex << verify << "(expected:" << Qt::hex << (quint8)packetout[0] << ")";
 
     // Tell the command to process
-    qDebug() << "Writing EC_HOST_IND (clear)...";
     m_pPort->Write(EC_HOST_IND, 1);  // Register is write 1 to clear
-
-    qDebug() << "Writing HOST_EC_IND = HOST2EC_CMD_PROC...";
     m_pPort->Write(HOST_EC_IND, HOST2EC_CMD_PROC);
-
-    // Verify HOST_EC was written
-    m_pPort->Read(HOST_EC_IND, &data);
-    qDebug() << "HOST_EC after write:" << Qt::hex << data << "(expected:" << Qt::hex << HOST2EC_CMD_PROC << ")";
 
     // Wait for the response
     int waittime = -5;
-    qDebug() << "Waiting for EC response (EC_HOST == EC2HOST_RESP_READY)...";
 
     while (1)
     {
         m_pPort->Read(EC_HOST_IND, &data);
 
-        // Log every 100ms or so
-        if (waittime >= 0 && waittime % 100 == 0) {
-            qDebug() << "  EC_HOST =" << Qt::hex << data << "at" << waittime << "ms";
-        }
-
         if (data == EC2HOST_RESP_READY) {
-            qDebug() << "EC responded! EC_HOST = EC2HOST_RESP_READY at" << waittime << "ms";
             break;
         }
 
         if (waittime >= 5000)
         {
-            qCWarning(emiCategory) << "Send cmd timeout";
-            qDebug() << "TIMEOUT! EC_HOST stuck at" << Qt::hex << data;
+            log(QString("Send cmd timeout, EC_HOST=0x%1").arg(data, 2, 16, QChar('0')), Logger::Warning);
             resp = EC_HOST_CMD_TIMEOUT;
 
             // Reset the bus
@@ -261,17 +233,15 @@ EC_HOST_CMD_STATUS EmiThread::SendCmdOut(QByteArray &packetout, QByteArray &payl
         else waittime++;
     }
 
-    if (waittime > 0)
+    if (waittime > 10)
     {
-        qCDebug(emiCategory) << "Wait Resp time " << waittime;
+        log(QString("Slow EC response: %1ms").arg(waittime), Logger::Debug);
     }
 
     //Read the input data packet
     resp = GetPayloadIn(payloadin);
 
 done:
-    //Mark cmd as read
-    //m_pPort->Write(HOST_EC_IND,HOST2EC_CMD_READY);
     return resp;
 #endif
 }
@@ -281,7 +251,7 @@ EC_HOST_CMD_STATUS EmiThread::PayloadToOutPack(quint16 cmd, QByteArray &payloado
     //Check the size of the packet
     if ((payloadout.size() + sizeof(struct ec_host_cmd_request_header)) > EMI_BUF_MAX_SIZE)
     {
-        qCWarning(emiCategory) << "Payload to big to send";
+        log("Payload too big to send", Logger::Warning);
         return EC_HOST_CMD_INVALID_PARAM;
     }
 
@@ -335,8 +305,7 @@ EC_HOST_CMD_STATUS EmiThread::WaitBusReady()
 
         if (retry > 10)
         {
-
-            qCWarning(emiCategory) << "BUS BUSY - HOST2EC " << data;
+            log(QString("Bus busy, HOST2EC=0x%1").arg(data, 2, 16, QChar('0')), Logger::Warning);
             return EC_HOST_CMD_BUS_ERROR;
         }
 
@@ -390,15 +359,11 @@ EC_HOST_CMD_STATUS EmiThread::GetPayloadIn(QByteArray &in)
             pHdr = reinterpret_cast<const ec_host_cmd_response_header*>(packetin.constData());
             readbytes = sizeof(struct ec_host_cmd_request_header) + pHdr->data_len;
 
-            qCInfo(emiCategory) << "HeaderRec " << packetin.toHex();
-            qCInfo(emiCategory) << "Result 0x" << Qt::hex << pHdr->result;
-            qCInfo(emiCategory) << "Payload" << pHdr->data_len;
-
             //Validate the version
             if (pHdr->prtcl_ver != 3)
             {
 #if SHOW_POLE_HW_ERR
-                qCWarning(emiCategory) << "Invalid Version " << pHdr->prtcl_ver;
+                log(QString("Invalid protocol version %1").arg(pHdr->prtcl_ver), Logger::Warning);
 #endif
                 resp = EC_HOST_CMD_INVALID_VERSION;
                 return resp;
@@ -407,7 +372,7 @@ EC_HOST_CMD_STATUS EmiThread::GetPayloadIn(QByteArray &in)
             //vallidate the read size
             if (readbytes > EMI_BUF_MAX_SIZE)
             {
-                qCWarning(emiCategory) << "SendCmdLL Read Too Large " << readbytes;
+                log(QString("Response too large: %1 bytes").arg(readbytes), Logger::Warning);
                 resp = EC_HOST_CMD_RESPONSE_TOO_BIG;
                 return resp;
             }
@@ -421,8 +386,7 @@ EC_HOST_CMD_STATUS EmiThread::GetPayloadIn(QByteArray &in)
 
     if (crc)
     {
-        qCWarning(emiCategory) << "Emi Packet In CRC " << crc;
-        qCWarning(emiCategory) << packetin.toHex();
+        log(QString("Packet CRC error: 0x%1").arg(crc, 2, 16, QChar('0')), Logger::Warning);
         resp = EC_HOST_CMD_INVALID_CHECKSUM;
     }
 

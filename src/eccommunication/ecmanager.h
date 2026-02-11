@@ -10,7 +10,7 @@
 #include "host_ec_cmds.h"
 #include "emithread.h"
 #include "portio.h"
-#include "../logger.h"
+#include "logger.h"
 
 /**
  * @brief EcManager - Manages EC (Embedded Controller) communication for the service

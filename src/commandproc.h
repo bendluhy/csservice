@@ -7,6 +7,7 @@
 #include "RegistryAccess.h"
 #include "WmiAccess.h"
 #include "eccommunication/ecmanager.h"
+#include "action/actioncommandqueue.h"
 #include "command.qpb.h"
 
 class CommandProc : public QObject
@@ -22,6 +23,23 @@ public:
     EcManager* getEcManager() {return m_pEcManager;};
     // Process protobuf command and return response
     patrol::Command processCommand(const patrol::Command& request);
+
+    void triggerActionEvent(uint32_t eventId);
+
+    uint32_t queueAddAction(uint32_t eventId, const QString& name, const QString& qmlPath, const QStringList& params, int position = -1);
+    uint32_t queueEditAction(uint32_t eventId, int index, const QString& name, const QString& qmlPath, const QStringList& params);
+    uint32_t queueRemoveAction(uint32_t eventId, int index);
+    uint32_t queueGetActions(uint32_t eventId);
+    uint32_t queueGetAllEvents();
+    uint32_t queueGetAvailableActions();
+    uint32_t queueSaveActions();
+
+    // Store results from Monitor
+    void storeActionResult(uint32_t commandId, const patrol::ActionCommandResultRequest& result);
+    bool getActionResult(uint32_t commandId, patrol::ActionCommandResultRequest& outResult, int timeoutMs = 5000);
+    patrol::PollActionCommandsResponse handlePollActionCommands(const patrol::PollActionCommandsRequest& req);
+    patrol::ActionCommandResultResponse handleActionCommandResult(const patrol::ActionCommandResultRequest& req);
+    patrol::QueueActionCommandResponse handleQueueActionCommand(const patrol::QueueActionCommandRequest& req);
 
 private:
     // MSR
@@ -58,12 +76,18 @@ private:
     patrol::EcSmbusResponse handleEcSmbus(const patrol::EcSmbusRequest& req);
     patrol::EcShellCommandResponse handleEcShellCommand(const patrol::EcShellCommandRequest& req);
     patrol::EcGetStatusResponse handleEcGetStatus(const patrol::EcGetStatusRequest& req);
-
+    patrol::EcAcpiQueueWriteResponse handleEcAcpiQueueWrite(const patrol::EcAcpiQueueWriteRequest& req);
     patrol::PowerCommandResponse handlePowerCommand(const patrol::PowerCommandRequest& request);
+    patrol::DisplayBrightnessResponse handleDisplayBrightness(
+        const patrol::DisplayBrightnessRequest& req);
+    patrol::DisplayAutoBrightnessResponse handleDisplayAutoBrightness(
+        const patrol::DisplayAutoBrightnessRequest& req);
     Logger* m_pLogger;
     RegistryAccess m_RegistryAccess;
     WmiAccess m_WmiAccess;
     EcManager* m_pEcManager;
+    ActionCommandQueue m_actionQueue;
+
 };
 
 #endif // COMMANDPROC_H

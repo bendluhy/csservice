@@ -141,6 +141,24 @@ bool WindowsService::initializeService()
         clearEcState();
         testEcCommunication();
     }
+    if (m_commandProc.isEcInitialized()) {
+        m_bezelMonitor = new BezelMonitor(
+            m_commandProc.getEcManager(),
+            &m_commandProc,
+            &m_logger,
+            this
+            );
+
+        // Optional: log button presses at service level
+        connect(m_bezelMonitor, &BezelMonitor::buttonPressed,
+                this, [this](int button, quint32 eventId) {
+                    m_logger.log(QString("Bezel button %1 pressed (event 0x%2)")
+                                     .arg(button).arg(eventId, 4, 16, QChar('0')),
+                                 Logger::Info);
+                });
+
+        m_bezelMonitor->start(50);  // 50ms poll = responsive button detection
+    }
     // Create and initialize pipe server
     m_pipeServer = new NamedPipeServer(&m_logger, this);
 
@@ -336,7 +354,11 @@ void WindowsService::cleanup()
         delete m_shutdownTimer;
         m_shutdownTimer = nullptr;
     }
-
+    if (m_bezelMonitor) {
+        m_bezelMonitor->stop();
+        delete m_bezelMonitor;
+        m_bezelMonitor = nullptr;
+    }
     if (m_pipeServer) {
         m_pipeServer->stopAll();
         delete m_pipeServer;

@@ -12,6 +12,7 @@
 #include "monitor.h"
 #include "ecmemorymirror.h"
 #include "securecommandhandler.h"
+#include "bezel.h"
 
 #define SHUTDOWN_TIMEOUT_MS 10000
 
@@ -61,6 +62,7 @@ private:
     CommandProc m_commandProc;
     NamedPipeServer* m_pipeServer;
     SecureCommandHandler* m_secureHandler;  // Changed type name
+    BezelMonitor* m_bezelMonitor;
     Monitor* m_monitor;
     ECMemoryWriter* m_ecMemoryWriter;
     QTimer* m_shutdownTimer;
